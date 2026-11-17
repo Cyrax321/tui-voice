@@ -13,6 +13,7 @@ import os
 import sys
 from pathlib import Path
 import soundfile as sf
+import numpy as np
 import torch
 
 # Ensure paths
@@ -22,15 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tui_voice import phonemes as P
 
 
-def synthesize_text(model, text, plan, upstream_symbols, device="cuda", speed=1.0, voice=0, pitch_shift=0.15, pitch_range=0.85):
-    from tiny_voca.data import PhoneConverter
-    from tiny_voca.generate import predict
-    import numpy as np
+def synthesize_text(model, text, plan, upstream_symbols, cfg, device="cuda", speed=1.0, voice=0, pitch_shift=0.15, pitch_range=0.85):
     import re
-
-    converter = PhoneConverter(symbols=upstream_symbols)
-    
-    # Split sentences for long-form stability
     chunks = re.split(r'([.?!।\n]+)', text)
     sentences = []
     curr = ""
@@ -42,48 +36,55 @@ def synthesize_text(model, text, plan, upstream_symbols, device="cuda", speed=1.
     if curr.strip() and any(ch.isalnum() for ch in curr):
         sentences.append(curr.strip())
     if not sentences:
-        sentences = [text]
+        sentences = [text.strip()]
 
-    sr = 24000
-    pause_silence = np.zeros(int(sr * 0.18), dtype=np.float32)
-    accumulated_audio = []
+    all_waves = []
+    pause_samples = int(cfg.sample_rate * 0.18)
+    silence = torch.zeros(pause_samples, device=device)
 
-    for s_idx, sentence in enumerate(sentences):
-        phoneme_str = P.text_to_phonemes(sentence)
-        phoneme_tokens = P.tokenize_phonemes(phoneme_str)
-        remapped_tokens = [plan["mapping"].get(t, plan["mapping"].get("<unk>", 0)) for t in phoneme_tokens]
-        remapped_str = " ".join(remapped_tokens)
+    for idx, sent in enumerate(sentences):
+        tokens_str = P.phonemize(sent)
+        token_ids = P.encode(tokens_str, plan, upstream_symbols)
+        if len(token_ids) > cfg.max_tokens - 10:
+            token_ids = token_ids[:cfg.max_tokens - 10]
 
-        # PhoneConverter
-        ph_ids = converter.text_to_ids(remapped_str)
-        ph_tensor = torch.tensor([ph_ids], dtype=torch.long, device=device)
+        tok_tensor = torch.tensor([token_ids], dtype=torch.long, device=device)
+        stress = torch.zeros_like(tok_tensor)
+        lengths = torch.tensor([len(token_ids)], dtype=torch.long, device=device)
+        speakers = torch.tensor([voice], dtype=torch.long, device=device)
 
-        with torch.no_grad():
-            audio_out, _ = predict(
-                model=model,
-                phone_ids=ph_tensor,
-                speaker=voice,
+        with torch.inference_mode():
+            wave, _, _ = model.synthesize(
+                tok_tensor, stress, lengths, speakers,
                 speed=speed,
                 pitch_shift=pitch_shift,
                 pitch_range=pitch_range,
-                temperature=0.7,
+                voiced_vowels=True
             )
+        w = wave.squeeze(0)
+        all_waves.append(w)
+        if idx < len(sentences) - 1:
+            all_waves.append(silence)
 
-        wav = audio_out.squeeze().cpu().numpy()
-        accumulated_audio.append(wav)
-        if s_idx < len(sentences) - 1:
-            accumulated_audio.append(pause_silence)
+    full_wave = torch.cat(all_waves)
+    audio = full_wave.cpu().numpy()
 
-    return np.concatenate(accumulated_audio)
+    peak = float(np.abs(audio).max()) if len(audio) else 0.0
+    if peak > 0.99:
+        audio = audio * (0.95 / peak)
+
+    return audio
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", default="/content/drive/MyDrive/tui_voice/run1/last.pt")
     parser.add_argument("--vocab-plan", default="/content/data/vocab_plan.json")
+    parser.add_argument("--config", default="/content/tiny-voca/weights/config.json")
     parser.add_argument("--prompts", default="examples/showcase_prompts.json")
-    parser.add_argument("--out-dir", default="showcase_samples")
+    parser.add_argument("--out-dir", default="/content/showcase_samples")
     parser.add_argument("--voice", type=int, default=0)
+    parser.add_argument("--speed", type=float, default=1.0)
     parser.add_argument("--pitch-shift", type=float, default=0.15)
     parser.add_argument("--pitch-range", type=float, default=0.85)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -106,6 +107,8 @@ def main():
     state = torch.load(ckpt_path, map_location="cpu", weights_only=False)
 
     cfg_dict = state.get("config")
+    if not cfg_dict and Path(args.config).exists():
+        cfg_dict = json.load(open(args.config))
     cfg = Config.from_dict(cfg_dict) if cfg_dict else Config()
     model = TinyVoca(cfg)
 
@@ -130,7 +133,6 @@ def main():
 
     prompts_path = Path(args.prompts)
     if not prompts_path.exists():
-        # check repo root
         prompts_path = Path(__file__).resolve().parent.parent / "examples" / "showcase_prompts.json"
     
     categories = json.load(open(prompts_path))
@@ -147,23 +149,25 @@ def main():
             text_ml = item["malayalam"]
             
             wav_path = out_dir / f"{cat_name}_{p_id}.wav"
-            print(f"  -> Generating: {title} ({p_id})...", end="", flush=True)
+            print(f"  -> Generating: {title} ({p_id})... ", end="", flush=True)
             wav_data = synthesize_text(
                 model=model,
                 text=text_ml,
                 plan=plan,
                 upstream_symbols=upstream_symbols,
+                cfg=cfg,
                 device=args.device,
+                speed=args.speed,
                 voice=args.voice,
                 pitch_shift=args.pitch_shift,
                 pitch_range=args.pitch_range,
             )
-            sf.write(str(wav_path), wav_data, 24000)
-            print(f" Saved! ({len(wav_data)/24000:.2f}s)")
+            sf.write(str(wav_path), wav_data, cfg.sample_rate)
+            print(f"Saved! ({len(wav_data)/cfg.sample_rate:.2f}s)")
             count += 1
 
     print("\n" + "="*60)
-    print(f"Successfully generated {count} showcase audio files in {out_dir.resolve()}!")
+    print(f"SUCCESS: Generated {count} showcase audio files in {out_dir.resolve()}!")
 
 
 if __name__ == "__main__":
