@@ -196,7 +196,7 @@ def patch_annotations(ann_dir, acoustic_root, acoustic_fp, frontend_fp, annotati
 
 
 def remap_checkpoint(upstream_ckpt, vocab_plan, output_path):
-    """Load upstream checkpoint, remap symbol embeddings, save."""
+    """Load upstream checkpoint, remap symbol embeddings, save formatted for tiny_voca.train."""
     import torch
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from tui_voice.init_ckpt import remap_embeddings
@@ -205,21 +205,46 @@ def remap_checkpoint(upstream_ckpt, vocab_plan, output_path):
     plan = json.load(open(vocab_plan))
     init_from = plan["init_from"]
 
-    if isinstance(state, dict) and "model" in state and isinstance(state["model"], dict):
-        model_sd = state["model"]
+    if isinstance(state, dict):
+        if "system" in state and isinstance(state["system"], dict):
+            model_sd = state["system"]
+        elif "model" in state and isinstance(state["model"], dict):
+            model_sd = state["model"]
+        else:
+            model_sd = state
     else:
         model_sd = state
 
     new_sd, changed = remap_embeddings(model_sd, init_from)
-    print(f"Remapped {len(changed)} embedding tables: {changed}")
+    print(f"Remapped {len(changed)} embedding tables: {changed}", flush=True)
 
-    if isinstance(state, dict) and "model" in state:
+    from tiny_voca.config import Config
+    c_dict = Config().to_dict()
+
+    if isinstance(state, dict):
         state["model"] = new_sd
+        state["system"] = new_sd
+        state["step"] = 0  # Start fine-tuning from step 0
+        state["config"] = c_dict
+        if "recipe" not in state or not isinstance(state["recipe"], dict):
+            state["recipe"] = {"gan_start": 8000, "steps": 40000}
+        else:
+            state["recipe"]["gan_start"] = 8000
+        if "datasets" not in state:
+            state["datasets"] = {}
     else:
-        state = new_sd
+        state = {
+            "format_version": 4,
+            "config": c_dict,
+            "step": 0,
+            "system": new_sd,
+            "model": new_sd,
+            "recipe": {"gan_start": 8000, "steps": 40000},
+            "datasets": {},
+        }
 
     torch.save(state, output_path)
-    print(f"Saved remapped checkpoint to {output_path}")
+    print(f"Saved remapped checkpoint to {output_path}", flush=True)
     return output_path
 
 
@@ -314,8 +339,12 @@ def main():
     # ── Step 3: Remap checkpoint ──
     # Save remapped.pt in the parent directory so output_dir is strictly empty for tiny_voca.train
     remapped_ckpt = output_dir.parent / "remapped.pt"
-    if (output_dir / "remapped.pt").exists():
-        (output_dir / "remapped.pt").unlink()
+    if output_dir.exists():
+        for item in output_dir.iterdir():
+            if item.is_file():
+                item.unlink()
+            elif item.is_dir():
+                shutil.rmtree(item)
 
     if not args.skip_remap:
         remap_checkpoint(args.upstream_ckpt, args.vocab_plan, str(remapped_ckpt))
