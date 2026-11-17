@@ -81,6 +81,19 @@ def extract_features(wav_path, config):
     return {"mel": mel_t, "prosody": prosody_t, "wave": wave}
 
 
+def _extract_worker(item):
+    wav_path_str, out_path_str, config = item
+    out_path = Path(out_path_str)
+    if out_path.exists():
+        return True
+    feats = extract_features(wav_path_str, config)
+    if feats is None:
+        return False
+    import torch
+    torch.save(feats, out_path)
+    return True
+
+
 def compute_acoustic_fingerprint(config):
     """Match tiny_voca.config.Config.acoustic_fingerprint."""
     fields = ("sample_rate", "hop", "n_fft", "n_mels", "f0_min", "f0_max")
@@ -195,21 +208,25 @@ def main():
 
     # ── Step 1: Extract acoustic features ──
     if not args.skip_features:
-        import torch
+        from concurrent.futures import ProcessPoolExecutor
+        import multiprocessing
         feat_dir.mkdir(parents=True, exist_ok=True)
         wavs = sorted(wav_dir.glob("*.wav"))
-        print(f"Extracting features for {len(wavs)} wav files -> {feat_dir}")
-        for i, wp in enumerate(wavs):
-            out_path = feat_dir / f"{wp.stem}.pt"
-            if out_path.exists():
-                continue
-            feats = extract_features(str(wp), model_cfg)
-            if feats is None:
-                print(f"  skip {wp.name}: too short")
-                continue
-            torch.save(feats, out_path)
-            if (i + 1) % 500 == 0:
-                print(f"  {i + 1}/{len(wavs)}")
+        n_workers = min(multiprocessing.cpu_count() or 4, 8)
+        print(f"Extracting features for {len(wavs)} wav files -> {feat_dir} ({n_workers} CPU workers)...")
+
+        items = [(str(wp), str(feat_dir / f"{wp.stem}.pt"), model_cfg) for wp in wavs]
+        # Filter already existing
+        pending = [it for it in items if not Path(it[1]).exists()]
+        print(f"  {len(items) - len(pending)} already cached, {len(pending)} to process.")
+        
+        if pending:
+            done_count = 0
+            with ProcessPoolExecutor(max_workers=n_workers) as ex:
+                for res in ex.map(_extract_worker, pending, chunksize=16):
+                    done_count += 1
+                    if done_count % 1000 == 0 or done_count == len(pending):
+                        print(f"  [{done_count}/{len(pending)}] features extracted ({done_count * 100 // len(pending)}%)")
         print(f"Feature extraction complete: {len(list(feat_dir.glob('*.pt')))} files")
 
     # ── Step 2: Patch annotations ──
