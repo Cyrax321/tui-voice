@@ -86,12 +86,15 @@ def _extract_worker(item):
     out_path = Path(out_path_str)
     if out_path.exists():
         return True
-    feats = extract_features(wav_path_str, config)
-    if feats is None:
+    try:
+        feats = extract_features(wav_path_str, config)
+        if feats is None:
+            return False
+        import torch
+        torch.save(feats, out_path)
+        return True
+    except Exception:
         return False
-    import torch
-    torch.save(feats, out_path)
-    return True
 
 
 def compute_acoustic_fingerprint(config):
@@ -206,24 +209,34 @@ def main():
     model_cfg = cfg.get("model", cfg)
     acoustic_fp = compute_acoustic_fingerprint(model_cfg)
 
+    # Only extract features for clips that are in the annotations
+    valid_stems = set()
+    for s in ("train", "validation", "test"):
+        p = ann_dir / f"{s}.jsonl"
+        if p.exists():
+            for line in open(p):
+                if line.strip():
+                    try:
+                        valid_stems.add(Path(json.loads(line)["path"]).stem)
+                    except Exception:
+                        pass
+
     # ── Step 1: Extract acoustic features ──
     if not args.skip_features:
-        from concurrent.futures import ProcessPoolExecutor
-        import multiprocessing
+        from concurrent.futures import ThreadPoolExecutor
         feat_dir.mkdir(parents=True, exist_ok=True)
-        wavs = sorted(wav_dir.glob("*.wav"))
-        n_workers = min(multiprocessing.cpu_count() or 4, 8)
-        print(f"Extracting features for {len(wavs)} wav files -> {feat_dir} ({n_workers} CPU workers)...")
+        wavs = [wp for wp in sorted(wav_dir.glob("*.wav")) if wp.stem in valid_stems]
+        n_workers = 8
+        print(f"Extracting features for {len(wavs)} accepted clips -> {feat_dir} ({n_workers} threads)...")
 
         items = [(str(wp), str(feat_dir / f"{wp.stem}.pt"), model_cfg) for wp in wavs]
-        # Filter already existing
         pending = [it for it in items if not Path(it[1]).exists()]
         print(f"  {len(items) - len(pending)} already cached, {len(pending)} to process.")
         
         if pending:
             done_count = 0
-            with ProcessPoolExecutor(max_workers=n_workers) as ex:
-                for res in ex.map(_extract_worker, pending, chunksize=16):
+            with ThreadPoolExecutor(max_workers=n_workers) as ex:
+                for res in ex.map(_extract_worker, pending):
                     done_count += 1
                     if done_count % 1000 == 0 or done_count == len(pending):
                         print(f"  [{done_count}/{len(pending)}] features extracted ({done_count * 100 // len(pending)}%)")
