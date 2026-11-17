@@ -32,7 +32,9 @@ def main():
     parser.add_argument("--output", default="sample.wav")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--speed", type=float, default=1.0)
-    parser.add_argument("--voice", type=int, default=0, help="Speaker index (0 or 1)")
+    parser.add_argument("--voice", type=int, default=0, help="Speaker index (0 for Female F2, 1 for Male M2)")
+    parser.add_argument("--pitch-shift", type=float, default=0.0, help="Raise/lower pitch (e.g. 0.15 to keep voice cleanly female)")
+    parser.add_argument("--pitch-range", type=float, default=1.0, help="Scale pitch movement (0.85-0.9 makes voice more steady)")
     args = parser.parse_args()
 
     from tiny_voca.config import Config
@@ -119,6 +121,8 @@ def main():
             wave, _, _ = model.synthesize(
                 tok_tensor, stress, lengths, speakers,
                 speed=args.speed,
+                pitch_shift=args.pitch_shift,
+                pitch_range=args.pitch_range,
                 voiced_vowels=True
             )
         w = wave.squeeze(0)
