@@ -1,0 +1,152 @@
+{
+  "everyday_whatsapp": [
+    {
+      "id": "adheesh_sir",
+      "title": "Adheesh Sir Greeting",
+      "malayalam": "അധീഷ് സാർ ഇന്നു സുഖം ആണോ, എന്തൊക്കെ ഉണ്ട് വിശേഷം?",
+      "manglish": "Adheesh sir inu sugam ano, endhokke und vishesham?"
+    },
+    {
+      "id": "hello_sugamano",
+      "title": "Simple Hello",
+      "malayalam": "ഹലോ, സുഖമാണോ? എവിടെയാണ് ഇപ്പോൾ?",
+      "manglish": "Hello, sugamano? Evideyannu ippol?"
+    },
+    {
+      "id": "reached_home",
+      "title": "Reached Home",
+      "malayalam": "ഞാൻ ഇപ്പോൾ വീട്ടിൽ എത്തി, അവിടെ കാര്യങ്ങൾ ഒക്കെ ശരിയായോ?",
+      "manglish": "Njan ippol veettil etthi, avide kaaryangal okke shariyaayo?"
+    },
+    {
+      "id": "see_you_tomorrow",
+      "title": "See you tomorrow",
+      "malayalam": "ശരി, നമുക്ക് നാളെ രാവിലെ പത്ത് മണിക്ക് ഓഫീസിൽ വെച്ച് കാണാം.",
+      "manglish": "Shari, namukku naale raavile patthu manikku officil vechu kaanaam."
+    },
+    {
+      "id": "tea_break",
+      "title": "Tea/Coffee break",
+      "malayalam": "ചായ കുടിച്ചോ? എന്താണ് ഇന്നത്തെ പ്ലാൻ?",
+      "manglish": "Chaya kudicho? Enthaanu innathe plan?"
+    },
+    {
+      "id": "rainy_weather",
+      "title": "Rainy Day Weather",
+      "malayalam": "ഇവിടെ രാവിലെ മുതൽ നല്ല മഴയാണ്, പുറത്തിറങ്ങാൻ പറ്റുന്നില്ല.",
+      "manglish": "Ivide raavile muthal nalla mazhayaanu, purathirangaan pattunnilla."
+    },
+    {
+      "id": "good_day",
+      "title": "Thank you & Good day",
+      "malayalam": "വളരെ നന്ദി, നല്ലൊരു ശുഭദിനം നേരുന്നു!",
+      "manglish": "Valare nandi, nalloru shubhadinam nerunnu!"
+    }
+  ],
+  "smart_assistant_commands": [
+    {
+      "id": "weather_kochi",
+      "title": "Weather Check",
+      "malayalam": "ഇന്ന് കൊച്ചിയിൽ മഴ പെയ്യാൻ സാധ്യതയുണ്ടോ?",
+      "manglish": "Innu Kochiyil mazha peyyaan saadhyathayundo?"
+    },
+    {
+      "id": "set_alarm",
+      "title": "Set Alarm",
+      "malayalam": "നാളെ രാവിലെ ആറരയ്ക്ക് ഒരു അലാറം സെറ്റ് ചെയ്യുക.",
+      "manglish": "Naale raavile aharakku oru alarm set cheyyuka."
+    },
+    {
+      "id": "restaurant_search",
+      "title": "Nearby Restaurant",
+      "malayalam": "അടുത്തുള്ള ഏറ്റവും നല്ല മലബാർ റെസ്റ്റോറന്റ് ഏതാണ്?",
+      "manglish": "Aduthulla eettavum nalla Malabar restaurant eethaanu?"
+    },
+    {
+      "id": "repeat_please",
+      "title": "Did not understand",
+      "malayalam": "ക്ഷമിക്കണം, നിങ്ങൾ പറഞ്ഞത് വ്യക്തമായില്ല. ദയവായി വീണ്ടും പറയാമോ?",
+      "manglish": "Kshamikkaam, ningal paranjathu vyakthamaayilla. Dayavaayi veendum parayaamo?"
+    },
+    {
+      "id": "time_check",
+      "title": "Time Check",
+      "malayalam": "ഇപ്പോൾ സമയം കൃത്യം എട്ടര ആയിരിക്കുന്നു.",
+      "manglish": "Ippol samayam krithyam ettara aayirikkunnu."
+    }
+  ],
+  "customer_care_ivr": [
+    {
+      "id": "ivr_welcome",
+      "title": "Welcome IVR",
+      "malayalam": "ഞങ്ങളുടെ കസ്റ്റമർ കെയർ സർവീസിലേക്ക് സ്വാഗതം. മലയാളത്തിൽ തുടരുന്നതിനായി ഒന്നിൽ അമർത്തുക.",
+      "manglish": "Njangalude customer care servicelikku swaagatham. Malayalathil thudarunnathinaayi onnil amarthuka."
+    },
+    {
+      "id": "ivr_hold",
+      "title": "Agent Hold",
+      "malayalam": "ദയവായി കുറച്ചു സമയം കാത്തിരിക്കുക, ഞങ്ങളുടെ എക്സിക്യൂട്ടീവ് ഉടൻ നിങ്ങളുമായി സംസാരിക്കുന്നതാണ്.",
+      "manglish": "Dayavaayi kurachu samayam kaathirikkuka, njangalude executive udan ningalumaayi samsaarikkunnathaannu."
+    },
+    {
+      "id": "otp_verified",
+      "title": "OTP Verification",
+      "malayalam": "നിങ്ങളുടെ ഫോണിലേക്ക് അയച്ച ഒ ടി പി നമ്പർ കൃത്യമായി നൽകിയിരിക്കുന്നു. നന്ദി.",
+      "manglish": "Ningalude phonilekku ayacha OTP number krithyamaayi nalkiyirikkunnu. Nandi."
+    },
+    {
+      "id": "delivery_notice",
+      "title": "Delivery Notice",
+      "malayalam": "നിങ്ങളുടെ പാഴ്സൽ ഇന്ന് വൈകുന്നേരം അഞ്ച് മണിക്ക് മുൻപായി ഡെലിവറി ചെയ്യുന്നതാണ്.",
+      "manglish": "Ningalude parcel innu vaikunneram anju manikku munpaayi delivery cheyyunnathaannu."
+    }
+  ],
+  "public_announcements": [
+    {
+      "id": "railway_station",
+      "title": "Railway Platform Announcement",
+      "malayalam": "ശ്രദ്ധിക്കുക, തിരുവനന്തപുരത്തു നിന്നും കോഴിക്കോട്ടേക്കുള്ള ജനശതാബ്ദി എക്സ്പ്രസ്സ് രണ്ടാം നമ്പർ പ്ലാറ്റ്‌ഫോമിൽ എത്തിച്ചേരുന്നു.",
+      "manglish": "Shradhikkuka, Thiruvananthapurathu ninnum Kozhikkottekkulla Janashathabdhi Express randaam number platformil ethiccherunnu."
+    },
+    {
+      "id": "metro_station",
+      "title": "Metro Announcement",
+      "malayalam": "അടുത്ത സ്റ്റേഷൻ എം ജി റോഡ്. വാതിലുകൾ ഇടത്തു വശത്ത് തുറക്കുന്നതാണ്.",
+      "manglish": "Adutha station MG Road. Vaathilukal idathu vashathu thurakkunnathaannu."
+    },
+    {
+      "id": "airport_boarding",
+      "title": "Airport Boarding",
+      "malayalam": "ദുബായിലേക്ക് യാത്ര ചെയ്യുന്ന യാത്രക്കാർ ദയവായി ഗേറ്റ് നമ്പർ നാലിലേക്ക് എത്തിച്ചേരുക.",
+      "manglish": "Dubayilekku yaathra cheyyunna yaathrakkaar dayavaayi gate number naalilekku ethiccheruka."
+    }
+  ],
+  "news_and_media": [
+    {
+      "id": "news_weather_warning",
+      "title": "Prime-Time Weather Bulletin",
+      "malayalam": "പ്രധാന വാർത്തകൾ. സംസ്ഥാനത്ത് അടുത്ത അഞ്ച് ദിവസം ശക്തമായ മഴയ്ക്ക് സാധ്യതയുണ്ടെന്ന് കേന്ദ്ര കാലാവസ്ഥാ വകുപ്പ് മുന്നറിയിപ്പ് നൽകി. മലയോര മേഖലകളിൽ പ്രത്യേക ജാഗ്രതാ നിർദ്ദേശം പുറപ്പെടുവിച്ചിട്ടുണ്ട്. ജനങ്ങൾ സുരക്ഷിത സ്ഥാനങ്ങളിലേക്ക് മാറണമെന്ന് ദുരന്ത നിവാരണ അതോറിറ്റി അറിയിച്ചു.",
+      "manglish": "Pradhana vaarthakal. Samsthaanathu adutha anju divasam shakthamaaya mazhaykku saadhyathayundennu kendra kaalaavastha vakuppu munnariyippu nalki. Malayoora mekhakalil prathyeka jaagratha nirdesham purappeduvichittundu. Janangal surakshitha sthaanangalilekku maaranamenno durantha nivaarana authority ariyichu."
+    },
+    {
+      "id": "sports_update",
+      "title": "Sports Update",
+      "malayalam": "ഇന്ത്യയും ഓസ്‌ട്രേലിയയും തമ്മിലുള്ള ക്രിക്കറ്റ് മത്സരം ഇന്ന് ഉച്ചയ്ക്ക് രണ്ട് മണിക്ക് ആരംഭിക്കും.",
+      "manglish": "Indiayum Australiayum thammilulla cricket malsaram innu uchaykku randu manikku aarambhikkum."
+    }
+  ],
+  "ai_tech_showcase": [
+    {
+      "id": "tech_tui_intro",
+      "title": "Tui Voice Intro",
+      "malayalam": "നമസ്കാരം, ഇത് തുയി വോയ്സ് മിനി മലയാളം മോഡൽ ആണ്. വെറും പത്ത് മെഗാബൈറ്റ് വലിപ്പത്തിൽ നേരിട്ട് ഫോണുകളിൽ സംസാരിക്കാൻ എനിക്ക് കഴിയും.",
+      "manglish": "Namaskaram, ithu Tui Voice Mini Malayalam model aanu. Verum patthu megabyte valippathil nerittu phonukalil samsaarikkaan enikku kazhiyum."
+    },
+    {
+      "id": "tech_edge_ai",
+      "title": "On-Device Edge AI",
+      "malayalam": "ഇന്റർനെറ്റ് ഇല്ലാതെ തന്നെ ഏത് മൊബൈൽ ഫോണിലും ഈ ശബ്ദ സാങ്കേതികവിദ്യ തത്സമയം പ്രവർത്തിക്കും.",
+      "manglish": "Internet illaathe thanne eethu mobile phonilum ee shabda saankethika vidhya thalsamayam pravarthikkum."
+    }
+  ]
+}
