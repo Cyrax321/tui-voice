@@ -13,6 +13,7 @@ import os
 import sys
 from pathlib import Path
 import soundfile as sf
+import numpy as np
 import torch
 
 # Ensure paths
@@ -82,34 +83,61 @@ def main():
     except Exception:
         upstream_symbols = plan.get("new_symbols", [])
 
-    print(f"\nText: {args.text}", flush=True)
-    tokens_str = P.phonemize(args.text)
-    print(f"Phonemes ({len(tokens_str)}): {' '.join(tokens_str)}", flush=True)
-    token_ids = P.encode(tokens_str, plan, upstream_symbols)
+    # Split text into sentences for natural long-form reading
+    import re
+    chunks = re.split(r'([.?!।\n]+)', args.text)
+    sentences = []
+    curr = ""
+    for c in chunks:
+        curr += c
+        if re.search(r'[.?!।\n]', c) and any(ch.isalnum() for ch in curr):
+            sentences.append(curr.strip())
+            curr = ""
+    if curr.strip() and any(ch.isalnum() for ch in curr):
+        sentences.append(curr.strip())
+    if not sentences:
+        sentences = [args.text.strip()]
 
-    tok_tensor = torch.tensor([token_ids], dtype=torch.long, device=args.device)
-    stress = torch.zeros_like(tok_tensor)
-    lengths = torch.tensor([len(token_ids)], dtype=torch.long, device=args.device)
-    speakers = torch.tensor([args.voice], dtype=torch.long, device=args.device)
+    print(f"\nText ({len(sentences)} sentence(s)): {args.text}", flush=True)
 
-    print("Synthesizing audio...", flush=True)
-    with torch.inference_mode():
-        wave, _, _ = model.synthesize(
-            tok_tensor, stress, lengths, speakers,
-            speed=args.speed,
-            voiced_vowels=True
-        )
+    all_waves = []
+    pause_samples = int(cfg.sample_rate * 0.18)  # 180ms natural pause between sentences
+    silence = torch.zeros(pause_samples, device=args.device)
 
-    audio = wave.squeeze(0).cpu().numpy()
+    for idx, sent in enumerate(sentences):
+        tokens_str = P.phonemize(sent)
+        token_ids = P.encode(tokens_str, plan, upstream_symbols)
+        if len(token_ids) > cfg.max_tokens - 10:
+            token_ids = token_ids[:cfg.max_tokens - 10]
+
+        tok_tensor = torch.tensor([token_ids], dtype=torch.long, device=args.device)
+        stress = torch.zeros_like(tok_tensor)
+        lengths = torch.tensor([len(token_ids)], dtype=torch.long, device=args.device)
+        speakers = torch.tensor([args.voice], dtype=torch.long, device=args.device)
+
+        with torch.inference_mode():
+            wave, _, _ = model.synthesize(
+                tok_tensor, stress, lengths, speakers,
+                speed=args.speed,
+                voiced_vowels=True
+            )
+        w = wave.squeeze(0)
+        all_waves.append(w)
+        if idx < len(sentences) - 1:
+            all_waves.append(silence)
+
+    full_wave = torch.cat(all_waves)
+    audio = full_wave.cpu().numpy()
+
     # Normalize peak if loud
-    peak = float(torch.from_numpy(audio).abs().max())
+    peak = float(np.abs(audio).max()) if len(audio) else 0.0
     if peak > 0.99:
         audio = audio * (0.95 / peak)
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     sf.write(str(out_path), audio, cfg.sample_rate)
-    print(f"SUCCESS: Saved {len(audio)/cfg.sample_rate:.2f}s audio to {out_path} (sample rate: {cfg.sample_rate} Hz, peak: {peak:.2f})", flush=True)
+    print(f"SUCCESS: Saved {len(audio)/cfg.sample_rate:.2f}s audio ({len(sentences)} sentences) to {out_path} (rate: {cfg.sample_rate} Hz, peak: {peak:.2f})", flush=True)
 
 
 if __name__ == "__main__":
