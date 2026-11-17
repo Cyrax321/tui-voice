@@ -6,6 +6,7 @@ needs sounds English lacks (retroflexes, aspirates, ഴ). We REPURPOSE slots of 
 phones so the checkpoint loads unchanged; each repurposed slot starts from the nearest
 English sound's embedding row (see init_from).
 """
+import re
 import subprocess
 from collections import Counter
 from .text import split_clauses
@@ -21,6 +22,8 @@ NEAREST = {
     "ɨ": "ɪ", "ɐ": "ʌ", "o": "oʊ", "e": "eɪ", "ɯ": "ʊ",
     "tʰ": "t", "kʰ": "k", "pʰ": "p", "dʱ": "d", "bʱ": "b", "ɡʱ": "ɡ", "ʈʰ": "t",
     "ɖʱ": "d", "cʰ": "tʃ", "ɟʱ": "dʒ", "t̪": "t", "d̪": "d", "n̪": "n",
+    "dʰ": "d", "bʰ": "b", "cʰ": "tʃ", "ɟʰ": "dʒ",
+    "ʲ": "j", "ʈʈ": "t", "r.": "ɹ", "r̩": "ɹ", "ʰχ": "k", "χ": "k",
     # tiny-voca has no raw a / aː / u (it has ɐ ɑː ʊ uː); found by checking against its real symbols
     "a": "ɐ", "aː": "ɑː", "u": "ʊ", "uː": "uː", "eː": "eɪ", "oː": "oː", "i": "ɪ", "iː": "iː",
 }
@@ -33,7 +36,7 @@ def is_vowel(sym: str) -> bool:
     # upstream's model.py keeps non-persistent vowel/phone masks per slot (duration/pitch losses),
     # so a repurposed slot must keep its class: vowels stay vowels, consonants stay consonants
     return any(c in VOWEL_CHARS for c in sym)
-_STRIP_MARKS = "ˈˌ'ˑ"
+_STRIP_MARKS = "ˈˌ'ˑ."
 
 
 def run_espeak(clause: str, voice: str = "ml") -> str:
@@ -87,14 +90,46 @@ def _fallback_chain(ph, upstream):
         return ph, "exact"
     if ph in NEAREST and NEAREST[ph] in upstream:
         return NEAREST[ph], "table"
-    base = ph.replace("ː", "").replace("ʰ", "").replace("ʱ", "").replace("\u032a", "")
+
+    # 1. Collapse repeated characters (e.g. ʈʈ -> ʈ, mm -> m)
+    dedup = re.sub(r'(.)\1+', r'\1', ph)
+    if dedup in upstream:
+        return dedup, "dedup"
+    if dedup in NEAREST and NEAREST[dedup] in upstream:
+        return NEAREST[dedup], "table_dedup"
+
+    # 2. Strip diacritics, length marks, aspiration, dots, modifiers
+    clean = re.sub(r'[ːʰʱʲ\u032a\u0329._~-]', '', ph)
+    if clean in upstream:
+        return clean, "clean_exact"
+    if clean in NEAREST and NEAREST[clean] in upstream:
+        return NEAREST[clean], "clean_table"
+
+    clean_dedup = re.sub(r'[ːʰʱʲ\u032a\u0329._~-]', '', dedup)
+    if clean_dedup in upstream:
+        return clean_dedup, "clean_dedup_exact"
+    if clean_dedup in NEAREST and NEAREST[clean_dedup] in upstream:
+        return NEAREST[clean_dedup], "clean_dedup_table"
+
+    # 3. Check individual characters
+    for ch in ph:
+        if ch in upstream:
+            return ch, "char_exact"
+        if ch in NEAREST and NEAREST[ch] in upstream:
+            return NEAREST[ch], "table_char"
+
+    # 4. First character fallback
+    base = ph[:1]
     if base in upstream:
-        return base, "stripped"
+        return base, "first_char"
     if base in NEAREST and NEAREST[base] in upstream:
-        return NEAREST[base], "table_stripped"
-    if base[:1] in upstream:
-        return base[:1], "first_char"
-    return None, "none"
+        return NEAREST[base], "first_char_table"
+
+    # 5. Class default: never return None (prevents unmapped KeyError)
+    default_phone = "ə" if is_vowel(ph) else "t"
+    if default_phone in upstream:
+        return default_phone, "class_default"
+    return next(iter(upstream)), "emergency"
 
 
 def resolve_specials(upstream_symbols):
@@ -166,5 +201,7 @@ def encode(tokens, plan, upstream_symbols):
         elif t in idx:
             out.append(idx[t])
         else:
-            raise KeyError(f"unmapped token {t!r}")
+            # Resilient fallback instead of crash
+            src, _ = _fallback_chain(t, idx)
+            out.append(idx[src])
     return out

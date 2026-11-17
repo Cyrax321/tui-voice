@@ -2,13 +2,24 @@
 Usage: python scripts/02_phonemize.py --data data --upstream-symbols upstream_symbols.json
 upstream_symbols.json = JSON list of the checkpoint's symbols in embedding-index order."""
 import argparse, json, os, sys
+from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tui_voice import phonemes as P
 
 ap = argparse.ArgumentParser(); ap.add_argument("--data", default="data")
-ap.add_argument("--upstream-symbols"); a = ap.parse_args()
+ap.add_argument("--upstream-symbols")
+ap.add_argument("--workers", type=int, default=16)
+a = ap.parse_args()
+
 rows = [json.loads(l) for l in open(f"{a.data}/manifest.jsonl")]
-for r in rows: r["tokens_str"] = P.phonemize(r["text"])
+
+def _ph(r):
+    r["tokens_str"] = P.phonemize(r["text"])
+    return r
+
+print(f"Phonemizing {len(rows)} sentences with {a.workers} workers...")
+with ThreadPoolExecutor(max_workers=a.workers) as ex:
+    rows = list(ex.map(_ph, rows))
 cnt = P.inventory([r["tokens_str"] for r in rows])
 print(len(cnt), "distinct Malayalam phones. Top:", cnt.most_common(70))
 if a.upstream_symbols:

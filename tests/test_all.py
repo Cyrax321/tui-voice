@@ -47,6 +47,16 @@ def test_vocab_plan_keeps_size_and_inits():
     assert all(0 <= i < len(up) for i in enc)
 
 
+def test_complex_and_geminate_phones():
+    up = ["<pad>", "<bos>", "<eos>", "<sp>", "t", "d", "n", "ɹ", "l", "j", "k", "ə"]
+    ml_counts = Counter({"ʈʈ": 9159, "ʲ": 14887, "r.": 5760, "r̩": 1717, "ʰχ": 3})
+    plan = P.build_vocab_plan(up, ml_counts)
+    assert not plan["unresolved"], plan["report"]
+    enc = P.encode([P.BOS, "ʈʈ", "ʲ", "r.", "r̩", "ʰχ", P.EOS], plan, up)
+    assert len(enc) == 7
+    assert all(0 <= idx < len(up) for idx in enc)
+
+
 def test_durations_exact_and_min1():
     is_phone = [False, True, True, False, True, True, False]       # bos a b wb c d eos
     d = D.build_durations(is_phone, [0.10, 0.20, 0.40, 0.55], 120)
