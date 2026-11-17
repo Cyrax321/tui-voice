@@ -27,79 +27,78 @@ from pathlib import Path
 
 import numpy as np
 import soundfile as sf
+import torch
 
+# Ensure tiny-voca package is importable
+sys.path.insert(0, "/content/tiny-voca/src")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _CACHED_FILTERS = None
 
 
-def get_mel_filters(config):
+def get_mel_filters(sr=24000, n_fft=1024, n_mels=80):
     global _CACHED_FILTERS
     if _CACHED_FILTERS is None:
         import librosa
-        _CACHED_FILTERS = librosa.filters.mel(
-            sr=config["sample_rate"], n_fft=config["n_fft"], n_mels=config["n_mels"]
-        )
+        _CACHED_FILTERS = librosa.filters.mel(sr=sr, n_fft=n_fft, n_mels=n_mels)
     return _CACHED_FILTERS
 
 
-def extract_features(wav_path, config):
-    """Replicate tiny_voca.prepare.extract: wav -> (mel, prosody, wave) tensors."""
+def extract_features(wav_path, config, speaker_idx=0):
+    """Robust extraction matching tiny-voca using PyTorch pitch tracking (no Numba crash)."""
     import librosa
-    import torch
+    import torchaudio.functional as AF
+
+    sr_target = getattr(config, "sample_rate", 24000)
+    hop = getattr(config, "hop", 256)
+    n_fft = getattr(config, "n_fft", 1024)
+    n_mels = getattr(config, "n_mels", 80)
+    f0_min = getattr(config, "f0_min", 50.0)
+    f0_max = getattr(config, "f0_max", 600.0)
+    pitch_ref = getattr(config, "pitch_reference_hz", 200.0)
 
     y, sr = sf.read(wav_path, dtype="float32")
-    if sr != config["sample_rate"]:
-        y = librosa.resample(y, orig_sr=sr, target_sr=config["sample_rate"])
+    if sr != sr_target:
+        y = librosa.resample(y, orig_sr=sr, target_sr=sr_target)
 
-    hop = config["hop"]
     frames = math.ceil(len(y) / hop)
     if frames < 1:
         return None
 
-    # Pad to exact frame count
-    y = np.pad(y, (0, frames * hop - len(y))).astype(np.float32)
+    y_pad = np.pad(y, (0, frames * hop - len(y))).astype(np.float32)
 
     # Mel spectrogram using cached filters
-    spectrum = librosa.stft(y, n_fft=config["n_fft"], hop_length=hop,
+    spectrum = librosa.stft(y_pad, n_fft=n_fft, hop_length=hop,
                             center=True, pad_mode="constant")[:, :frames]
-    filters = get_mel_filters(config)
+    filters = get_mel_filters(sr=sr_target, n_fft=n_fft, n_mels=n_mels)
     mel = np.log(np.maximum(filters @ np.abs(spectrum) ** 2, 1e-5)).T
 
-    # Pitch and voicing via pyin
-    f0, voiced, _ = librosa.pyin(
-        y, fmin=config["f0_min"], fmax=config["f0_max"],
-        sr=config["sample_rate"], frame_length=config["n_fft"],
-        hop_length=hop, center=True, pad_mode="constant"
-    )
-    f0 = f0[:frames]
-    voiced = voiced[:frames]
-    f0 = np.nan_to_num(f0, nan=config.get("pitch_reference_hz", 200.0))
-    log_pitch = np.log(np.maximum(f0, 1e-5) / config.get("pitch_reference_hz", 200.0))
-    voiced_float = voiced.astype(np.float32)
+    # Pitch tracking via PyTorch (pure C++/CUDA, zero Numba JIT crash on Python 3.13)
+    w_tensor = torch.from_numpy(y_pad).unsqueeze(0)
+    f0 = AF.detect_pitch_frequency(
+        w_tensor, sample_rate=sr_target,
+        frame_time=hop / sr_target,
+        freq_low=f0_min, freq_high=f0_max
+    )[0].numpy()
 
-    # Energy (log RMS per frame)
-    energy = np.zeros(frames, dtype=np.float32)
-    for i in range(frames):
-        c = i * hop
-        seg = y[max(0, c - hop):c + hop]
-        energy[i] = np.log(np.sqrt(np.mean(seg ** 2)) + 1e-9)
+    if len(f0) < frames:
+        f0 = np.pad(f0, (0, frames - len(f0)))
+    else:
+        f0 = f0[:frames]
 
-    prosody = np.stack([log_pitch, voiced_float, energy], axis=-1).astype(np.float32)
-    wave = torch.from_numpy(y)
-    mel_t = torch.from_numpy(mel.astype(np.float32))
-    prosody_t = torch.from_numpy(prosody)
+    voiced = (f0 > f0_min)
+    pitch = np.where(voiced, np.log(np.maximum(f0, 1.0) / pitch_ref), 0.0)
 
-    return {"mel": mel_t, "prosody": prosody_t, "wave": wave}
+    # Energy (RMS)
+    rms = librosa.feature.rms(y=y_pad, frame_length=n_fft, hop_length=hop, center=True, pad_mode="constant")[0, :frames]
+    prosody = np.stack((pitch, voiced.astype(np.float32), np.log(np.maximum(rms, 1e-5))), axis=-1)
 
-
-def warmup_audio_processing(config):
-    """Warm up librosa/numba in the main thread to prevent multi-threaded JIT compilation crashes."""
-    import librosa
-    get_mel_filters(config)
-    dummy = np.zeros(config["sample_rate"], dtype=np.float32)
-    librosa.stft(dummy, n_fft=config["n_fft"], hop_length=config["hop"])
-    librosa.pyin(dummy, fmin=config["f0_min"], fmax=config["f0_max"],
-                 sr=config["sample_rate"], frame_length=config["n_fft"], hop_length=config["hop"])
+    return {
+        "wave": torch.from_numpy(y_pad),
+        "mel": torch.from_numpy(mel.astype(np.float32)),
+        "prosody": torch.from_numpy(prosody.astype(np.float32)),
+        "speaker": speaker_idx,
+    }
 
 
 def _extract_worker(item):
@@ -111,10 +110,10 @@ def _extract_worker(item):
         feats = extract_features(wav_path_str, config)
         if feats is None:
             return False
-        import torch
         torch.save(feats, out_path)
         return True
-    except Exception:
+    except Exception as e:
+        print(f"Error {wav_path_str}: {e}", flush=True)
         return False
 
 
@@ -226,9 +225,14 @@ def main():
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    cfg = json.load(open(args.config))
-    model_cfg = cfg.get("model", cfg)
-    acoustic_fp = compute_acoustic_fingerprint(model_cfg)
+    try:
+        from tiny_voca.config import Config
+        model_cfg = Config()
+        acoustic_fp = model_cfg.acoustic_fingerprint
+    except Exception:
+        cfg = json.load(open(args.config))
+        model_cfg = cfg.get("model", cfg)
+        acoustic_fp = compute_acoustic_fingerprint(model_cfg)
 
     # Only extract features for clips that are in the annotations
     valid_stems = set()
@@ -247,10 +251,7 @@ def main():
         from concurrent.futures import ThreadPoolExecutor
         feat_dir.mkdir(parents=True, exist_ok=True)
         wavs = [wp for wp in sorted(wav_dir.glob("*.wav")) if wp.stem in valid_stems]
-        n_workers = 4
-
-        print("Warming up audio processing (pre-compiling STFT and pitch JIT)...", flush=True)
-        warmup_audio_processing(model_cfg)
+        n_workers = 8
 
         items = [(str(wp), str(feat_dir / f"{wp.stem}.pt"), model_cfg) for wp in wavs]
         pending = [it for it in items if not Path(it[1]).exists()]
@@ -264,6 +265,8 @@ def main():
                     done_count += 1
                     if done_count % 500 == 0 or done_count == len(pending):
                         pct = done_count * 100 // len(pending)
+                        print(f"  [{done_count}/{len(pending)}] features extracted ({pct}%)", flush=True)
+        print(f"Feature extraction complete: {len(list(feat_dir.glob('*.pt')))} files", flush=True)
                         print(f"  [{done_count}/{len(pending)}] features extracted ({pct}%)", flush=True)
         print(f"Feature extraction complete: {len(list(feat_dir.glob('*.pt')))} files", flush=True)
 
