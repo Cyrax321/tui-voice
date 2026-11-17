@@ -267,8 +267,6 @@ def main():
                         pct = done_count * 100 // len(pending)
                         print(f"  [{done_count}/{len(pending)}] features extracted ({pct}%)", flush=True)
         print(f"Feature extraction complete: {len(list(feat_dir.glob('*.pt')))} files", flush=True)
-                        print(f"  [{done_count}/{len(pending)}] features extracted ({pct}%)", flush=True)
-        print(f"Feature extraction complete: {len(list(feat_dir.glob('*.pt')))} files", flush=True)
 
     # ── Step 2: Patch annotations ──
     frontend_fp = compute_frontend_fingerprint()
