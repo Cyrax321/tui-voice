@@ -196,7 +196,7 @@ def patch_annotations(ann_dir, acoustic_root, acoustic_fp, frontend_fp, annotati
 
 
 def remap_checkpoint(upstream_ckpt, vocab_plan, output_path):
-    """Load upstream checkpoint, remap symbol embeddings, save formatted for tiny_voca.train."""
+    """Load upstream checkpoint, remap symbol embeddings, save."""
     import torch
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from tui_voice.init_ckpt import remap_embeddings
@@ -205,46 +205,21 @@ def remap_checkpoint(upstream_ckpt, vocab_plan, output_path):
     plan = json.load(open(vocab_plan))
     init_from = plan["init_from"]
 
-    if isinstance(state, dict):
-        if "system" in state and isinstance(state["system"], dict):
-            model_sd = state["system"]
-        elif "model" in state and isinstance(state["model"], dict):
-            model_sd = state["model"]
-        else:
-            model_sd = state
+    if isinstance(state, dict) and "model" in state and isinstance(state["model"], dict):
+        model_sd = state["model"]
     else:
         model_sd = state
 
     new_sd, changed = remap_embeddings(model_sd, init_from)
-    print(f"Remapped {len(changed)} embedding tables: {changed}", flush=True)
+    print(f"Remapped {len(changed)} embedding tables: {changed}")
 
-    from tiny_voca.config import Config
-    c_dict = Config().to_dict()
-
-    if isinstance(state, dict):
+    if isinstance(state, dict) and "model" in state:
         state["model"] = new_sd
-        state["system"] = new_sd
-        state["step"] = 0  # Start fine-tuning from step 0
-        state["config"] = c_dict
-        if "recipe" not in state or not isinstance(state["recipe"], dict):
-            state["recipe"] = {"gan_start": 8000, "steps": 40000}
-        else:
-            state["recipe"]["gan_start"] = 8000
-        if "datasets" not in state:
-            state["datasets"] = {}
     else:
-        state = {
-            "format_version": 4,
-            "config": c_dict,
-            "step": 0,
-            "system": new_sd,
-            "model": new_sd,
-            "recipe": {"gan_start": 8000, "steps": 40000},
-            "datasets": {},
-        }
+        state = new_sd
 
     torch.save(state, output_path)
-    print(f"Saved remapped checkpoint to {output_path}", flush=True)
+    print(f"Saved remapped checkpoint to {output_path}")
     return output_path
 
 
@@ -268,6 +243,8 @@ def main():
     ap.add_argument("--save-every", type=int, default=1000)
     ap.add_argument("--keep-every", type=int, default=5000)
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--resume", default="", help="Resume training from a checkpoint (e.g. output/last.pt)")
+    ap.add_argument("--max-seconds", type=float, default=86400, help="Wall-time cap per invocation in seconds (default: 86400 = 24h)")
     ap.add_argument("--skip-features", action="store_true", help="Skip feature extraction (already done)")
     ap.add_argument("--skip-remap", action="store_true", help="Skip checkpoint remapping (already done)")
     ap.add_argument("--dry-run", action="store_true", help="Prepare everything but don't launch training")
@@ -337,37 +314,51 @@ def main():
     print(f"Patched annotations in {ann_dir}", flush=True)
 
     # ── Step 3: Remap checkpoint ──
-    # Save remapped.pt in the parent directory so output_dir is strictly empty for tiny_voca.train
     remapped_ckpt = output_dir.parent / "remapped.pt"
-    if output_dir.exists():
-        for item in output_dir.iterdir():
-            if item.is_file():
-                item.unlink()
-            elif item.is_dir():
-                shutil.rmtree(item)
+    if not args.resume:
+        # Save remapped.pt in the parent directory so output_dir is strictly empty for tiny_voca.train
+        if (output_dir / "remapped.pt").exists():
+            (output_dir / "remapped.pt").unlink()
 
-    if not args.skip_remap:
-        remap_checkpoint(args.upstream_ckpt, args.vocab_plan, str(remapped_ckpt))
-    elif not remapped_ckpt.exists():
-        print(f"ERROR: --skip-remap but {remapped_ckpt} does not exist")
-        sys.exit(1)
+        if not args.skip_remap:
+            remap_checkpoint(args.upstream_ckpt, args.vocab_plan, str(remapped_ckpt))
+        elif not remapped_ckpt.exists():
+            print(f"ERROR: --skip-remap but {remapped_ckpt} does not exist")
+            sys.exit(1)
 
     # ── Step 4: Launch training ──
-    train_cmd = [
-        sys.executable, "-m", "tiny_voca.train",
-        "--train", str(ann_dir / "train.jsonl"),
-        "--validation", str(ann_dir / "validation.jsonl"),
-        "--output", str(output_dir),
-        "--init-from", str(remapped_ckpt),
-        "--new-data",
-        "--steps", str(args.steps),
-        "--gan-start", str(args.gan_start),
-        "--batch-frames", str(args.batch_frames),
-        "--learning-rate", str(args.learning_rate),
-        "--save-every", str(args.save_every),
-        "--keep-every", str(args.keep_every),
-        "--device", args.device,
-    ]
+    if args.resume:
+        train_cmd = [
+            sys.executable, "-m", "tiny_voca.train",
+            "--train", str(ann_dir / "train.jsonl"),
+            "--validation", str(ann_dir / "validation.jsonl"),
+            "--output", str(output_dir),
+            "--resume", str(args.resume),
+            "--steps", str(args.steps),
+            "--max-seconds", str(args.max_seconds),
+            "--batch-frames", str(args.batch_frames),
+            "--learning-rate", str(args.learning_rate),
+            "--save-every", str(args.save_every),
+            "--keep-every", str(args.keep_every),
+            "--device", args.device,
+        ]
+    else:
+        train_cmd = [
+            sys.executable, "-m", "tiny_voca.train",
+            "--train", str(ann_dir / "train.jsonl"),
+            "--validation", str(ann_dir / "validation.jsonl"),
+            "--output", str(output_dir),
+            "--init-from", str(remapped_ckpt),
+            "--new-data",
+            "--steps", str(args.steps),
+            "--gan-start", str(args.gan_start),
+            "--max-seconds", str(args.max_seconds),
+            "--batch-frames", str(args.batch_frames),
+            "--learning-rate", str(args.learning_rate),
+            "--save-every", str(args.save_every),
+            "--keep-every", str(args.keep_every),
+            "--device", args.device,
+        ]
     print("\n" + "=" * 60)
     print("TRAINING COMMAND:")
     print(" \\\n  ".join(train_cmd))
