@@ -73,39 +73,51 @@ def extract_features(wav_path, config, speaker_idx=0):
     filters = get_mel_filters(sr=sr_target, n_fft=n_fft, n_mels=n_mels)
     mel = np.log(np.maximum(filters @ np.abs(spectrum) ** 2, 1e-5)).T
 
-    # Pitch tracking via PyTorch (GPU accelerated if available, zero Numba crash)
-    w_tensor = torch.from_numpy(y_pad).unsqueeze(0)
-    try:
-        if torch.cuda.is_available():
-            f0 = AF.detect_pitch_frequency(
-                w_tensor.cuda(), sample_rate=sr_target,
-                frame_time=hop / sr_target,
-                freq_low=f0_min, freq_high=f0_max
-            )[0].cpu().numpy()
-        else:
-            f0 = AF.detect_pitch_frequency(
-                w_tensor, sample_rate=sr_target,
-                frame_time=hop / sr_target,
-                freq_low=f0_min, freq_high=f0_max
-            )[0].numpy()
-    except Exception:
-        f0 = AF.detect_pitch_frequency(
-            w_tensor, sample_rate=sr_target,
-            frame_time=hop / sr_target,
-            freq_low=f0_min, freq_high=f0_max
-        )[0].numpy()
+    # Ultra-fast GPU-accelerated pitch and energy tracking via PyTorch FFT
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    w_tensor = torch.from_numpy(y_pad).unsqueeze(0).to(dev)
+    win_len = n_fft
+    padded = torch.nn.functional.pad(w_tensor, (win_len // 2, win_len // 2), mode="constant")
+    unfolded = padded.unfold(1, win_len, hop)
+    if unfolded.shape[1] > frames:
+        unfolded = unfolded[:, :frames, :]
+
+    # 1. FFT autocorrelation on GPU
+    fft_size = 2048
+    X = torch.fft.rfft(unfolded, n=fft_size, dim=-1)
+    autocorr = torch.fft.irfft(torch.abs(X) ** 2, n=fft_size, dim=-1)[..., :win_len]
+
+    tau_min = max(1, int(sr_target / f0_max))
+    tau_max = min(win_len - 1, int(sr_target / f0_min))
+    search_region = autocorr[..., tau_min:tau_max]
+    max_corr, best_tau = torch.max(search_region, dim=-1)
+    best_tau = (best_tau + tau_min).float()
+
+    f0_t = sr_target / torch.clamp(best_tau, min=1.0)
+    r0 = autocorr[..., 0] + 1e-8
+    voiced_t = (max_corr / r0) > 0.35
+    f0_t = torch.where(voiced_t, f0_t, torch.zeros_like(f0_t))
+
+    f0 = f0_t[0].cpu().numpy()
+    voiced = voiced_t[0].cpu().numpy()
 
     if len(f0) < frames:
         f0 = np.pad(f0, (0, frames - len(f0)))
+        voiced = np.pad(voiced, (0, frames - len(voiced)))
     else:
         f0 = f0[:frames]
+        voiced = voiced[:frames]
 
-    voiced = (f0 > f0_min)
     pitch = np.where(voiced, np.log(np.maximum(f0, 1.0) / pitch_ref), 0.0)
 
-    # Energy (RMS)
-    rms = librosa.feature.rms(y=y_pad, frame_length=n_fft, hop_length=hop, center=True, pad_mode="constant")[0, :frames]
-    prosody = np.stack((pitch, voiced.astype(np.float32), np.log(np.maximum(rms, 1e-5))), axis=-1)
+    # 2. Fast Energy (RMS) on GPU
+    rms_t = torch.sqrt(torch.mean(unfolded ** 2, dim=-1) + 1e-9)[0].cpu().numpy()
+    if len(rms_t) < frames:
+        rms_t = np.pad(rms_t, (0, frames - len(rms_t)))
+    else:
+        rms_t = rms_t[:frames]
+
+    prosody = np.stack((pitch, voiced.astype(np.float32), np.log(np.maximum(rms_t, 1e-5))), axis=-1)
 
     return {
         "wave": torch.from_numpy(y_pad),
