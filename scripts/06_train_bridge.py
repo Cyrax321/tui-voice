@@ -212,6 +212,9 @@ def remap_checkpoint(upstream_ckpt, vocab_plan, output_path):
 
 
 def main():
+    print("=" * 60, flush=True)
+    print("Starting Tui Voice Mini Malayalam Training Bridge...", flush=True)
+    print("=" * 60, flush=True)
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--annotations", required=True, help="Dir with train/validation/test.jsonl from 03_align.py")
@@ -277,7 +280,7 @@ def main():
             with ThreadPoolExecutor(max_workers=n_workers) as ex:
                 for res in ex.map(_extract_worker, pending):
                     done_count += 1
-                    if done_count % 1000 == 0 or done_count == len(pending):
+                    if done_count % 200 == 0 or done_count == len(pending):
                         pct = done_count * 100 // len(pending)
                         print(f"  [{done_count}/{len(pending)}] features extracted ({pct}%)", flush=True)
         print(f"Feature extraction complete: {len(list(feat_dir.glob('*.pt')))} files", flush=True)
