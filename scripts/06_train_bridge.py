@@ -300,18 +300,35 @@ def main():
         print(f"Feature extraction complete: {len(list(feat_dir.glob('*.pt')))} files", flush=True)
 
     # ── Step 2: Patch annotations ──
-    frontend_fp = compute_frontend_fingerprint()
-    if frontend_fp is None:
-        print("WARNING: tiny_voca not importable; using placeholder frontend fingerprint", flush=True)
-        frontend_fp = "placeholder_requires_new_data_flag"
+    if args.resume:
+        print(f"Loading checkpoint metadata from {args.resume} to match exact fingerprints...", flush=True)
+        ckpt_state = torch.load(args.resume, map_location="cpu", weights_only=False)
+        annotation_fp = ckpt_state["annotation"]
+        frontend_fp = ckpt_state["frontend"]
+        print(f"Restoring exact checkpoint annotation fingerprint: {annotation_fp[:16]}...", flush=True)
+        patch_annotations(ann_dir, str(feat_dir), acoustic_fp, frontend_fp, annotation_fp)
+        
+        # Verify dataset fingerprints
+        train_bytes = (ann_dir / "train.jsonl").read_bytes()
+        val_bytes = (ann_dir / "validation.jsonl").read_bytes()
+        cur_train_fp = hashlib.sha256(train_bytes).hexdigest()
+        cur_val_fp = hashlib.sha256(val_bytes).hexdigest()
+        expected = ckpt_state.get("datasets", [])
+        if expected and len(expected) >= 2:
+            print(f"Dataset fingerprint verification: train={cur_train_fp == expected[0]}, val={cur_val_fp == expected[1]}", flush=True)
+    else:
+        frontend_fp = compute_frontend_fingerprint()
+        if frontend_fp is None:
+            print("WARNING: tiny_voca not importable; using placeholder frontend fingerprint", flush=True)
+            frontend_fp = "placeholder_requires_new_data_flag"
 
-    # Compute annotation fingerprint from the train manifest content
-    train_path = ann_dir / "train.jsonl"
-    ann_content = train_path.read_bytes() if train_path.exists() else b""
-    annotation_fp = hashlib.sha256(ann_content).hexdigest()
+        # Compute annotation fingerprint from the train manifest content
+        train_path = ann_dir / "train.jsonl"
+        ann_content = train_path.read_bytes() if train_path.exists() else b""
+        annotation_fp = hashlib.sha256(ann_content).hexdigest()
 
-    patch_annotations(ann_dir, str(feat_dir), acoustic_fp, frontend_fp, annotation_fp)
-    print(f"Patched annotations in {ann_dir}", flush=True)
+        patch_annotations(ann_dir, str(feat_dir), acoustic_fp, frontend_fp, annotation_fp)
+        print(f"Patched annotations in {ann_dir}", flush=True)
 
     # ── Step 3: Remap checkpoint ──
     remapped_ckpt = output_dir.parent / "remapped.pt"
@@ -335,6 +352,7 @@ def main():
             "--output", str(output_dir),
             "--resume", str(args.resume),
             "--steps", str(args.steps),
+            "--gan-start", str(args.gan_start),
             "--max-seconds", str(args.max_seconds),
             "--batch-frames", str(args.batch_frames),
             "--learning-rate", str(args.learning_rate),
