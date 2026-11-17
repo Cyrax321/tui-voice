@@ -15,13 +15,44 @@ ap.add_argument("--min-conf", type=float, default=0.30); ap.add_argument("--max-
 a = ap.parse_args(); os.makedirs(a.out, exist_ok=True)
 rows = [json.loads(l) for l in open(f"{a.data}/phonemes.jsonl")]
 if a.limit: rows = rows[: a.limit]
+
+# Resumability: track clips already aligned in previous/interrupted runs
+done_ids = set()
+ok_count = 0
+rej_count = 0
+for s in ("train", "validation", "test"):
+    p = f"{a.out}/{s}.jsonl"
+    if os.path.exists(p):
+        for line in open(p):
+            if line.strip():
+                try:
+                    done_ids.add(json.loads(line)["id"])
+                    ok_count += 1
+                except Exception:
+                    pass
+p_rej = f"{a.out}/rejected.jsonl"
+if os.path.exists(p_rej):
+    for line in open(p_rej):
+        if line.strip():
+            try:
+                done_ids.add(json.loads(line)["id"])
+                rej_count += 1
+            except Exception:
+                pass
+
+if done_ids:
+    print(f"Resuming alignment: {len(done_ids)} clips already processed ({ok_count} ok, {rej_count} rejected).")
+
 al = Aligner()
-outs = {s: open(f"{a.out}/{s}.jsonl", "w") for s in ("train", "validation", "test")}
-rej = open(f"{a.out}/rejected.jsonl", "w"); stats = {"ok": 0, "rej": 0}
+outs = {s: open(f"{a.out}/{s}.jsonl", "a") for s in ("train", "validation", "test")}
+rej = open(f"{a.out}/rejected.jsonl", "a")
+stats = {"ok": ok_count, "rej": rej_count}
 total_rows = len(rows)
 print(f"Aligning {total_rows} clips on {al.device}...")
 
 for idx, r in enumerate(rows, 1):
+    if r["id"] in done_ids:
+        continue
     y, _ = sf.read(r["path"], dtype="float32"); total = D.num_frames(len(y))
     toks = r["tokens_str"]; is_ph = [t not in P.SPECIALS and not (len(t) == 1 and t in ",;:.?!") for t in toks]
     phones = [t for t, p in zip(toks, is_ph) if p]
