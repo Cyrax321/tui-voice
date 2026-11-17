@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Environments & OS
+.env
+.venv
+env/
+venv/
+.DS_Store
+
+# Data, weights, and large assets
+data/
+weights/
+annotations/
+*.wav
+*.pt
+*.onnx
+*.jsonl
+upstream_report.txt
+upstream_symbols.json

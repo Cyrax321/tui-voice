@@ -1,0 +1,12 @@
+numpy
+scipy
+soundfile
+librosa
+datasets
+huggingface_hub
+transformers
+torch
+torchaudio
+onnx
+onnxconverter-common
+onnxruntime

@@ -1,0 +1,19 @@
+{
+  "name": "tui-voice-mini-ml",
+  "upstream": "n4ze3m/tiny-voca",
+  "dataset": "ai4bharat/Rasa",
+  "speaker": "Malayalam female",
+  "sample_rate": 24000,
+  "clip_seconds": [2.0, 12.0],
+  "trim_top_db": 35,
+  "peak": 0.9,
+  "val_clips": 300,
+  "test_clips": 300,
+  "seed": 1234,
+  "train": {
+    "stage_a_steps": 5000,
+    "stage_b_steps": 35000,
+    "gan_start_in_stage_b": 3000,
+    "note": "starting guesses, not verified; tune after the first 2k steps"
+  }
+}
