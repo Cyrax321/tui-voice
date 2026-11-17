@@ -191,10 +191,10 @@ The waveform is produced by a source-filter synthesizer instead of a neural voco
 
 ```bibtex
 @software{{tuivoice2026malayalam,
-  author = {Cyrax321},
-  title = {{model_name}: Ultra-compact 4.5M Malayalam Text-to-Speech},
-  year = {2026},
-  url = {https://huggingface.co/{repo_id}}
+  author = {{Cyrax321}},
+  title = {{{model_name}: Ultra-compact 4.5M Malayalam Text-to-Speech}},
+  year = {{2026}},
+  url = {{https://huggingface.co/{repo_id}}}
 }}
 ```
 
