@@ -312,7 +312,11 @@ def main():
     print(f"Patched annotations in {ann_dir}", flush=True)
 
     # ── Step 3: Remap checkpoint ──
-    remapped_ckpt = output_dir / "remapped.pt"
+    # Save remapped.pt in the parent directory so output_dir is strictly empty for tiny_voca.train
+    remapped_ckpt = output_dir.parent / "remapped.pt"
+    if (output_dir / "remapped.pt").exists():
+        (output_dir / "remapped.pt").unlink()
+
     if not args.skip_remap:
         remap_checkpoint(args.upstream_ckpt, args.vocab_plan, str(remapped_ckpt))
     elif not remapped_ckpt.exists():
