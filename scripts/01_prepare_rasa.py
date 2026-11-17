@@ -16,9 +16,10 @@ a = ap.parse_args()
 cfg = json.load(open(a.cfg))
 
 from datasets import get_dataset_config_names, load_dataset, Audio
+hf_tok = os.environ.get("HF_TOKEN", True)
 if a.list or not a.config:
-    names = get_dataset_config_names(a.repo); print(names); sys.exit(0)
-ds = load_dataset(a.repo, a.config, split=a.split)
+    names = get_dataset_config_names(a.repo, token=hf_tok); print(names); sys.exit(0)
+ds = load_dataset(a.repo, a.config, split=a.split, token=hf_tok)
 print(ds); print(ds.features)
 acol = next(k for k, v in ds.features.items() if isinstance(v, Audio))
 tcol = next((c for c in ("text", "sentence", "transcription", "normalized_text", "transcript") if c in ds.features), None)
