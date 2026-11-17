@@ -73,13 +73,27 @@ def extract_features(wav_path, config, speaker_idx=0):
     filters = get_mel_filters(sr=sr_target, n_fft=n_fft, n_mels=n_mels)
     mel = np.log(np.maximum(filters @ np.abs(spectrum) ** 2, 1e-5)).T
 
-    # Pitch tracking via PyTorch (pure C++/CUDA, zero Numba JIT crash on Python 3.13)
+    # Pitch tracking via PyTorch (GPU accelerated if available, zero Numba crash)
     w_tensor = torch.from_numpy(y_pad).unsqueeze(0)
-    f0 = AF.detect_pitch_frequency(
-        w_tensor, sample_rate=sr_target,
-        frame_time=hop / sr_target,
-        freq_low=f0_min, freq_high=f0_max
-    )[0].numpy()
+    try:
+        if torch.cuda.is_available():
+            f0 = AF.detect_pitch_frequency(
+                w_tensor.cuda(), sample_rate=sr_target,
+                frame_time=hop / sr_target,
+                freq_low=f0_min, freq_high=f0_max
+            )[0].cpu().numpy()
+        else:
+            f0 = AF.detect_pitch_frequency(
+                w_tensor, sample_rate=sr_target,
+                frame_time=hop / sr_target,
+                freq_low=f0_min, freq_high=f0_max
+            )[0].numpy()
+    except Exception:
+        f0 = AF.detect_pitch_frequency(
+            w_tensor, sample_rate=sr_target,
+            frame_time=hop / sr_target,
+            freq_low=f0_min, freq_high=f0_max
+        )[0].numpy()
 
     if len(f0) < frames:
         f0 = np.pad(f0, (0, frames - len(f0)))
@@ -251,11 +265,11 @@ def main():
         from concurrent.futures import ThreadPoolExecutor
         feat_dir.mkdir(parents=True, exist_ok=True)
         wavs = [wp for wp in sorted(wav_dir.glob("*.wav")) if wp.stem in valid_stems]
-        n_workers = 8
+        n_workers = 16
 
         items = [(str(wp), str(feat_dir / f"{wp.stem}.pt"), model_cfg) for wp in wavs]
         pending = [it for it in items if not Path(it[1]).exists()]
-        print(f"Extracting features for {len(wavs)} accepted clips -> {feat_dir} ({n_workers} threads)...", flush=True)
+        print(f"Extracting features for {len(wavs)} accepted clips -> {feat_dir} ({n_workers} threads, GPU accelerated)...", flush=True)
         print(f"  {len(items) - len(pending)} already cached, {len(pending)} to process.", flush=True)
         
         if pending:
@@ -263,7 +277,7 @@ def main():
             with ThreadPoolExecutor(max_workers=n_workers) as ex:
                 for res in ex.map(_extract_worker, pending):
                     done_count += 1
-                    if done_count % 500 == 0 or done_count == len(pending):
+                    if done_count % 1000 == 0 or done_count == len(pending):
                         pct = done_count * 100 // len(pending)
                         print(f"  [{done_count}/{len(pending)}] features extracted ({pct}%)", flush=True)
         print(f"Feature extraction complete: {len(list(feat_dir.glob('*.pt')))} files", flush=True)
