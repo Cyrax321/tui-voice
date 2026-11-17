@@ -29,6 +29,19 @@ import numpy as np
 import soundfile as sf
 
 
+_CACHED_FILTERS = None
+
+
+def get_mel_filters(config):
+    global _CACHED_FILTERS
+    if _CACHED_FILTERS is None:
+        import librosa
+        _CACHED_FILTERS = librosa.filters.mel(
+            sr=config["sample_rate"], n_fft=config["n_fft"], n_mels=config["n_mels"]
+        )
+    return _CACHED_FILTERS
+
+
 def extract_features(wav_path, config):
     """Replicate tiny_voca.prepare.extract: wav -> (mel, prosody, wave) tensors."""
     import librosa
@@ -36,7 +49,6 @@ def extract_features(wav_path, config):
 
     y, sr = sf.read(wav_path, dtype="float32")
     if sr != config["sample_rate"]:
-        import librosa
         y = librosa.resample(y, orig_sr=sr, target_sr=config["sample_rate"])
 
     hop = config["hop"]
@@ -47,11 +59,10 @@ def extract_features(wav_path, config):
     # Pad to exact frame count
     y = np.pad(y, (0, frames * hop - len(y))).astype(np.float32)
 
-    # Mel spectrogram
+    # Mel spectrogram using cached filters
     spectrum = librosa.stft(y, n_fft=config["n_fft"], hop_length=hop,
                             center=True, pad_mode="constant")[:, :frames]
-    filters = librosa.filters.mel(sr=config["sample_rate"], n_fft=config["n_fft"],
-                                  n_mels=config["n_mels"])
+    filters = get_mel_filters(config)
     mel = np.log(np.maximum(filters @ np.abs(spectrum) ** 2, 1e-5)).T
 
     # Pitch and voicing via pyin
@@ -79,6 +90,16 @@ def extract_features(wav_path, config):
     prosody_t = torch.from_numpy(prosody)
 
     return {"mel": mel_t, "prosody": prosody_t, "wave": wave}
+
+
+def warmup_audio_processing(config):
+    """Warm up librosa/numba in the main thread to prevent multi-threaded JIT compilation crashes."""
+    import librosa
+    get_mel_filters(config)
+    dummy = np.zeros(config["sample_rate"], dtype=np.float32)
+    librosa.stft(dummy, n_fft=config["n_fft"], hop_length=config["hop"])
+    librosa.pyin(dummy, fmin=config["f0_min"], fmax=config["f0_max"],
+                 sr=config["sample_rate"], frame_length=config["n_fft"], hop_length=config["hop"])
 
 
 def _extract_worker(item):
@@ -226,26 +247,30 @@ def main():
         from concurrent.futures import ThreadPoolExecutor
         feat_dir.mkdir(parents=True, exist_ok=True)
         wavs = [wp for wp in sorted(wav_dir.glob("*.wav")) if wp.stem in valid_stems]
-        n_workers = 8
-        print(f"Extracting features for {len(wavs)} accepted clips -> {feat_dir} ({n_workers} threads)...")
+        n_workers = 4
+
+        print("Warming up audio processing (pre-compiling STFT and pitch JIT)...", flush=True)
+        warmup_audio_processing(model_cfg)
 
         items = [(str(wp), str(feat_dir / f"{wp.stem}.pt"), model_cfg) for wp in wavs]
         pending = [it for it in items if not Path(it[1]).exists()]
-        print(f"  {len(items) - len(pending)} already cached, {len(pending)} to process.")
+        print(f"Extracting features for {len(wavs)} accepted clips -> {feat_dir} ({n_workers} threads)...", flush=True)
+        print(f"  {len(items) - len(pending)} already cached, {len(pending)} to process.", flush=True)
         
         if pending:
             done_count = 0
             with ThreadPoolExecutor(max_workers=n_workers) as ex:
                 for res in ex.map(_extract_worker, pending):
                     done_count += 1
-                    if done_count % 1000 == 0 or done_count == len(pending):
-                        print(f"  [{done_count}/{len(pending)}] features extracted ({done_count * 100 // len(pending)}%)")
-        print(f"Feature extraction complete: {len(list(feat_dir.glob('*.pt')))} files")
+                    if done_count % 500 == 0 or done_count == len(pending):
+                        pct = done_count * 100 // len(pending)
+                        print(f"  [{done_count}/{len(pending)}] features extracted ({pct}%)", flush=True)
+        print(f"Feature extraction complete: {len(list(feat_dir.glob('*.pt')))} files", flush=True)
 
     # ── Step 2: Patch annotations ──
     frontend_fp = compute_frontend_fingerprint()
     if frontend_fp is None:
-        print("WARNING: tiny_voca not importable; using placeholder frontend fingerprint")
+        print("WARNING: tiny_voca not importable; using placeholder frontend fingerprint", flush=True)
         frontend_fp = "placeholder_requires_new_data_flag"
 
     # Compute annotation fingerprint from the train manifest content
@@ -254,7 +279,7 @@ def main():
     annotation_fp = hashlib.sha256(ann_content).hexdigest()
 
     patch_annotations(ann_dir, str(feat_dir), acoustic_fp, frontend_fp, annotation_fp)
-    print(f"Patched annotations in {ann_dir}")
+    print(f"Patched annotations in {ann_dir}", flush=True)
 
     # ── Step 3: Remap checkpoint ──
     remapped_ckpt = output_dir / "remapped.pt"
