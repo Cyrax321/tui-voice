@@ -1,12 +1,16 @@
 # Tui Voice Mini (Malayalam) 🎙️
 
 [![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Cyrax321%2Ftui--voice--mini--ml-blue)](https://huggingface.co/Cyrax321/tui-voice-mini-ml)
+[![Status](https://img.shields.io/badge/Status-Research%20Preview%20(v0.1)-yellow.svg)](#current-status--known-limitations)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![Parameters](https://img.shields.io/badge/Parameters-4.5M-orange.svg)](#architecture-specifications)
 [![Model Size](https://img.shields.io/badge/Size-~10MB%20(FP16)-purple.svg)](#released-models--checkpoints)
 [![Sample Rate](https://img.shields.io/badge/Audio-24kHz%20Mono-red.svg)](#specifications)
 
-**Tui Voice Mini Malayalam (`tui-voice-mini-ml`)** is an ultra-compact, production-ready Malayalam Text-to-Speech (TTS) neural model. Fine-tuned from [tiny-voca](https://github.com/n4ze3m/tiny-voca) on the [AI4Bharat Rasa](https://huggingface.co/datasets/ai4bharat/Rasa) Malayalam studio corpus, it delivers natural, expressive 24 kHz speech with just **4.5 Million parameters (~10 MB footprint)**.
+> [!WARNING]
+> **Experimental Research Prototype (`v0.1-preview`):** This model is an early research proof-of-concept for ultra-compact, on-device Malayalam speech synthesis. It is **not a finished commercial voice**. While intelligible and extremely lightweight (~10 MB), it exhibits synthetic timbre artifacts inherent to low-parameter source-filter vocoding. See [Current Status & Known Limitations](#current-status--known-limitations) below.
+
+**Tui Voice Mini Malayalam (`tui-voice-mini-ml`)** is an experimental, ultra-compact Malayalam Text-to-Speech (TTS) neural research model. Fine-tuned from [tiny-voca](https://github.com/n4ze3m/tiny-voca) on the [AI4Bharat Rasa](https://huggingface.co/datasets/ai4bharat/Rasa) Malayalam studio corpus, it explores the lower limits of neural speech footprint with just **4.5 Million parameters (~10 MB footprint)**.
 
 Unlike heavy TTS architectures (like VITS, FastPitch, or XTTS) requiring hundreds of megabytes and dedicated GPU servers, Tui Voice Mini runs **100% offline directly in web browsers (WebAssembly), mobile devices, and embedded systems like Raspberry Pi and robotics controllers**.
 
@@ -106,6 +110,18 @@ To generate or audit the benchmark splits:
 ```bash
 python3 benchmark/scripts/prepare_dataset.py
 ```
+
+---
+
+## ⚠️ Current Status & Known Limitations
+
+Tui Voice Mini is released as an **experimental research prototype (v0.1-preview)**, not a commercial production system:
+
+1. **Synthetic Timbre & Vocoding:** To achieve a ~10 MB footprint and run without an external neural vocoder, Tui Voice Mini employs a lightweight source-filter harmonic oscillator + noise generator. While speech is intelligible, it produces an audible buzz/robotic timbre compared to 100M+ parameter vocoders (e.g. HiFi-GAN, BigVGAN).
+2. **Single Speaker Profile:** The model is currently trained on a single Malayalam female speaker (`female_01` from AI4Bharat Rasa). Multi-speaker or male voices are not yet supported.
+3. **Number & Symbol Verbalization:** Raw digits (e.g. `123`, `2026`) and English symbols (`%`, `$`) are not automatically expanded. All inputs must be converted into full Malayalam words (e.g. `നൂറ്റിയിരുപത്തിമൂന്ന്`) before synthesis.
+4. **Prosody on Long Paragraphs:** Synthesizing lengthy compound texts without punctuation pauses can result in flat or monotonous intonation contours.
+5. **Pending Benchmarking Verification:** Objective intelligibility metrics (CER/WER via IndicConformer) and human subjective listening evaluations (MOS/CMOS) are currently ongoing across the 500-sentence test split.
 
 ---
 

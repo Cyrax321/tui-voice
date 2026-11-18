@@ -27,15 +27,19 @@ widget:
   example_title: "IVR Customer Support"
 ---
 
-# 🎙️ Tui Voice Mini (Malayalam) — 4.5M Parameter Edge TTS
+# 🎙️ Tui Voice Mini (Malayalam) — 4.5M Parameter Edge TTS (v0.1-preview)
 
 [![GitHub](https://img.shields.io/badge/GitHub-Cyrax321%2Ftui--voice-black?logo=github)](https://github.com/Cyrax321/tui-voice)
+[![Status](https://img.shields.io/badge/Status-Research%20Preview%20(v0.1)-yellow.svg)](#current-status--known-limitations)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Parameters](https://img.shields.io/badge/Parameters-4.5M%20Total-orange.svg)](#architecture-specifications)
 [![Size](https://img.shields.io/badge/Size-18.2MB%20(FP32)%20%7C%209.1MB%20(FP16)%20%7C%205.4MB%20(INT8)-purple.svg)](#released-model-weights--formats)
-[![Audio](https://img.shields.io/badge/Audio-24kHz%20Studio%20Mono-red.svg)](#acoustic-specifications)
+[![Audio](https://img.shields.io/badge/Audio-24kHz%20Mono-red.svg)](#acoustic-specifications)
 
-**Tui Voice Mini Malayalam (`tui-voice-mini-ml`)** is an ultra-compact, production-ready Malayalam Text-to-Speech (TTS) neural model. Fine-tuned from [tiny-voca](https://github.com/n4ze3m/tiny-voca) using high-fidelity studio recordings from the [AI4Bharat Rasa](https://huggingface.co/datasets/ai4bharat/Rasa) Malayalam female corpus, it generates crisp, natural 24 kHz speech with just **4,537,291 parameters (~10 MB footprint)**.
+> [!WARNING]
+> **Experimental Research Prototype (`v0.1-preview`):** This model is an early research proof-of-concept for ultra-compact, on-device Malayalam speech synthesis. It is **not a finished commercial voice**. While intelligible and extremely lightweight (~10 MB), it exhibits synthetic timbre artifacts inherent to low-parameter source-filter vocoding. See [Current Status & Known Limitations](#current-status--known-limitations) below.
+
+**Tui Voice Mini Malayalam (`tui-voice-mini-ml`)** is an experimental, ultra-compact Malayalam Text-to-Speech (TTS) neural research model. Fine-tuned from [tiny-voca](https://github.com/n4ze3m/tiny-voca) on high-fidelity studio recordings from the [AI4Bharat Rasa](https://huggingface.co/datasets/ai4bharat/Rasa) Malayalam female corpus, it explores the lower limits of neural speech footprint with just **4,537,291 parameters (~10 MB footprint)**.
 
 Unlike conventional neural TTS pipelines (e.g., FastPitch + HiFi-GAN at ~110M params or Meta MMS-TTS VITS at ~36M params) requiring dedicated cloud GPUs and large memory buffers, **Tui Voice Mini runs 100% locally on-device**—in web browsers via WebAssembly, on iOS/Android, and on low-power ARM microcontrollers like Raspberry Pi and ROS robots.
 
@@ -47,7 +51,7 @@ Unlike conventional neural TTS pipelines (e.g., FastPitch + HiFi-GAN at ~110M pa
 * **Integrated Source-Filter Synthesizer:** Direct harmonic oscillator and filtered noise excitation—**requires zero external neural vocoder** (no separate 100 MB HiFi-GAN or Vocos needed).
 * **Native Runtime Prosody Control:** Algebraic `--pitch-shift` and `--pitch-range` controls to manipulate voice timbre and pitch contour with zero latency.
 * **Full Malayalam G2P Coverage:** Explicit 76-slot budget mapping covering all 59 Malayalam phonemes, long/short vowel distinctions, conjunct clusters, and explicit Chillus (ൺ, ൻ, ർ, ൽ, ൾ, ൿ).
-* **Production Lineage:** Fully trained for 40,000 steps with multi-period and multi-resolution adversarial GAN discriminators.
+* **Adversarial Training Lineage:** Trained for 40,000 steps with multi-period and multi-resolution adversarial GAN discriminators.
 
 ---
 
@@ -230,6 +234,18 @@ To reproduce the benchmark:
 ```bash
 python3 benchmark/scripts/prepare_dataset.py
 ```
+
+---
+
+## ⚠️ Current Status & Known Limitations
+
+Tui Voice Mini is released as an **experimental research prototype (v0.1-preview)**, not a commercial production system:
+
+1. **Synthetic Timbre & Vocoding:** To achieve a ~10 MB footprint and run without an external neural vocoder, Tui Voice Mini employs a lightweight source-filter harmonic oscillator + noise generator. While speech is intelligible, it produces an audible buzz/robotic timbre compared to 100M+ parameter vocoders (e.g. HiFi-GAN, BigVGAN).
+2. **Single Speaker Profile:** The model is currently trained on a single Malayalam female speaker (`female_01` from AI4Bharat Rasa). Multi-speaker or male voices are not yet supported.
+3. **Number & Symbol Verbalization:** Raw digits (e.g. `123`, `2026`) and English symbols (`%`, `$`) are not automatically expanded. All inputs must be converted into full Malayalam words (e.g. `നൂറ്റിയിരുപത്തിമൂന്ന്`) before synthesis.
+4. **Prosody on Long Paragraphs:** Synthesizing lengthy compound texts without punctuation pauses can result in flat or monotonous intonation contours.
+5. **Pending Benchmarking Verification:** Objective intelligibility metrics (CER/WER via IndicConformer) and human subjective listening evaluations (MOS/CMOS) are currently ongoing across the 500-sentence test split.
 
 ---
 
