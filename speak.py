@@ -5,7 +5,7 @@ Synthesizes Malayalam text and plays it directly through your Mac speakers!
 
 Usage:
   python speak.py "നമസ്കാരം, സുഖമാണോ?"
-  python speak.py "Adheesh sir inu sugam ano, endhokke und vishesham"
+  python speak.py "Endhokke und vishesham, sugam thanneyalle?"
   python speak.py "ഇന്ന് നല്ല മഴയുണ്ട്." --speed 0.9 --pitch-shift 0.20
 """
 import argparse
